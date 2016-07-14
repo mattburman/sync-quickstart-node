@@ -5,6 +5,30 @@ $(function () {
   var drawingColor = getRandomColor();
   var paintStart;
   var drawingCommands = [];
+  
+  var accessManager, syncClient;
+  $.getJSON('/token', {
+    device: 'browser-' + drawingColor
+  }, function (tokenResponse) {
+    //Initialize the Sync client
+    accessManager = new Twilio.AccessManager(tokenResponse.token);
+    syncClient = new Twilio.Sync.Client(accessManager);
+    
+    init();
+  });
+
+  var syncList;
+  function init() {
+    syncClient.list('doodle-pad-github').then(function (list) {
+      syncList = list;
+      
+      syncList.on('itemAdded', function (item) {
+        drawingCommands.push(item.value);
+        redraw();
+      });
+    });
+  }
+
 
   function addDrawingCommand(startCoords, endCoords, customCommand) {
     var command = {
@@ -14,6 +38,9 @@ $(function () {
       customCommand: customCommand
     };
     drawingCommands.push(command);
+    if(syncList) {
+      syncList.push(command);
+    }
   }
 
   $('#drawingSurface').on('mousedown', start);
