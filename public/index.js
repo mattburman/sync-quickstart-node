@@ -1,124 +1,123 @@
 $(function () {
-  //We'll use message to tell the user what's happening
-  var $message = $('#message');
+  var context = document.getElementById('drawingSurface')
+    .getContext("2d");
 
-  //Get handle to the game board buttons
-  var $buttons = $('#board .board-row button');
+  var drawingColor = getRandomColor();
+  var paintStart;
+  var drawingCommands = [];
 
-  //Manages the state of our access token we got from the server
-  var accessManager;
+  function addDrawingCommand(startCoords, endCoords, customCommand) {
+    var command = {
+      drawingColor: drawingColor,
+      startCoords: startCoords,
+      endCoords: endCoords,
+      customCommand: customCommand
+    };
+    drawingCommands.push(command);
+  }
 
-  //Our interface to the Sync service
-  var syncClient;
+  $('#drawingSurface').on('mousedown', start);
+  $('#drawingSurface').on('touchstart', start);
+  function start(e) {
+    paintStart = getCursorPosition(this, e);
+  }
 
-  //We're going to use a single Sync document, our simplest
-  //synchronisation primitive, for this demo
-  var syncDoc;
-
-  //Get an access token for the current user, passing a device ID
-  //In browser-based apps, every tab is like its own unique device
-  //synchronizing state -- so we'll use a random UUID to identify
-  //this tab.
-  $.getJSON('/token', {
-    device: getDeviceId()
-  }, function (tokenResponse) {
-    //Initialize the Sync client
-    accessManager = new Twilio.AccessManager(tokenResponse.token);
-    syncClient = new Twilio.Sync.Client(accessManager);
-
-    //Let's pop a message on the screen to show that Sync is ready
-    $message.html('Sync initialized!');
-
-    //Now that Sync is active, lets enable our game board
-    $buttons.attr('disabled', false);
-
-    //This code will create and/or open a Sync document
-    //Note the use of promises
-    syncClient.document('sync.game').then(function(doc) {
-      //Lets store it in our global variable
-      syncDoc = doc;
-
-      //Initialize game board UI to current state (if it exists)
-      var data = syncDoc.get();
-      if (data.board) {
-        updateUserInterface(data);
-      }
-
-      //Let's subscribe to changes on this document, so when something
-      //changes on this document, we can trigger our UI to update
-      syncDoc.on('updated', updateUserInterface);
-
-    });
-
-  });
-
-  //Whenever a board button is clicked:
-  $buttons.on('click', function (e) {
-    //Toggle the value: X, O, or empty
-    toggleCellValue($(e.target));
-
-    //Update the document
-    var data = readGameBoardFromUserInterface();
-
-    //Send updated document to Sync
-    //This should trigger "updated" events on other clients
-    syncDoc.set(data);
-
-  });
-
-  //Toggle the value: X, O, or empty (&nbsp; for UI)
-  function toggleCellValue($cell) {
-    var cellValue = $cell.html();
-
-    if (cellValue === 'X') {
-      $cell.html('O');
-    } else if (cellValue === 'O') {
-      $cell.html('&nbsp;');
-    } else {
-      $cell.html('X');
+  $('#drawingSurface').on('mousemove', draw);
+  $('#drawingSurface').on('touchmove', draw);
+  function draw(e) {
+    if (paintStart) {
+      var coords = getCursorPosition(this, e);
+      addDrawingCommand(paintStart, coords);
+      paintStart = coords;
+      redraw();
     }
   }
 
-  //Generate random UUID to identify this browser tab
-  //For a more robust solution consider a library like
-  //fingerprintjs2: https://github.com/Valve/fingerprintjs2
-  function getDeviceId() {
-    return 'browser-' + 
-      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-         var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
-         return v.toString(16);
-       });
+  $('#drawingSurface').on('mouseup', stop);
+  $('#drawingSurface').on('mouseleave', stop);
+  $('#drawingSurface').on('touchend', stop);
+  $('#drawingSurface').on('touchcancel', stop);
+
+  function stop() {
+    paintStart = null;
+  };
+
+  function redraw() {
+    //Clear the canvas
+    context.clearRect(0, 0, context.canvas.width,
+                      context.canvas.height);
+
+    context.lineJoin = "round";
+    context.lineWidth = 5;
+
+    var startCommandIndex = 0;
+    for (var j = drawingCommands.length - 1; j > 0; j--) {
+      if (drawingCommands[j].customCommand) {
+        startCommandIndex = j;
+        break;
+      }
+    }
+
+    drawFromCommandIndex(startCommandIndex);
+  }
+
+  function drawFromCommandIndex(startCommandIndex) {
+    for (var i = startCommandIndex; i < drawingCommands.length; i++) {
+      context.beginPath();
+      context.strokeStyle = drawingCommands[i].drawingColor;
+      context.moveTo(drawingCommands[i].startCoords.x,
+        drawingCommands[i].startCoords.y);
+      context.lineTo(drawingCommands[i].endCoords.x,
+        drawingCommands[i].endCoords.y);
+      context.stroke();
+      context.closePath();
+    }
   }
   
-  //Read the state of the UI and create a new document
-  function readGameBoardFromUserInterface() {
-    var board = [
-      ['', '', ''],
-      ['', '', ''],
-      ['', '', '']
-    ];
-
-    for (var row = 0; row < 3; row++) {
-      for (var col = 0; col < 3; col++) {
-        var selector = '[data-row="' + row + '"]' +
-          '[data-col="' + col + '"]';
-        board[row][col] = $(selector).html().replace('&nbsp;', '');
-      }
+  $(document).on('keyup', function (e) {
+    if(e.keyCode === 27) {
+      addDrawingCommand({ x: 0, y: 0 }, { x: 0, y: 0 }, 'clear');
+      redraw();
     }
-
-    return {board: board};
-  }
-
-  //Update the buttons on the board to match our document
-  function updateUserInterface(data) {
-    for (var row = 0; row < 3; row++) {
-      for (var col = 0; col < 3; col++) {
-        var selector = '[data-row="' + row + '"]' +
-          '[data-col="' + col + '"]';
-        var cellValue = data.board[row][col];
-        $(selector).html(cellValue === '' ? '&nbsp;' : cellValue);
-      }
-    }
-  }
+  });
 
 });
+
+function getCursorPosition(canvas, event) {
+  var result = {
+    x: event.clientX,
+    y: event.clientY
+  };
+
+  if (event.originalEvent.targetTouches) {
+    var touch;
+    var ev = event.originalEvent;
+    if (ev.targetTouches.length >= 1) {
+      touch = ev.targetTouches.item(0);
+    } else {
+      touch = ev.touches.item(0);
+    }
+    result.x = touch.pageX;
+    result.y = touch.pageY;
+  }
+
+  var rect = canvas.getBoundingClientRect();
+  result.x -= rect.left;
+  result.y -= rect.top;
+
+  return result;
+}
+
+function getRandomColor() {
+  var letters = '0123456789ABCDEF'.split('');
+  var color = '#';
+  for (var i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
+
+// prevent elastic scrolling
+document.body.addEventListener('touchmove', function (e) {
+  e.preventDefault();
+}, false);
