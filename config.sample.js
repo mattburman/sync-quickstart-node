@@ -7,5 +7,5 @@ module.exports = {
   apiSecret: 'your_api_secret',
   
   // Your Sync service instance SID
-  serviceSid: 'SIXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+  serviceSid: 'ISXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
 };
