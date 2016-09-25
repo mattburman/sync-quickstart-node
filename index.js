@@ -12,6 +12,12 @@ const config = require('./config.js');
 var app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(function(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
+
 /*
 Generate an Access Token for a sync application user - it generates a random
 username for the client requesting a token, and takes a device ID as a query
@@ -51,7 +57,7 @@ app.get('/token', (request, response) => {
 
 // Create http server and run it
 var server = http.createServer(app);
-var port = process.env.PORT || 3000;
+var port = process.env.PORT || 8181;
 server.listen(port, () => {
   console.log('Express server running on *:' + port);
 });
